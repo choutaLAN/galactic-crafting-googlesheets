@@ -1,0 +1,35 @@
+# Dependency directories
+node_modules/
+
+# Environment configuration files
+.env
+.package-lock.json
+.claps.json
+appsscript.json
+
+# Compiled output
+build/
+data/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+
+# Editor directories and files
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+
+# Test files and folders
+test/
+testBuild/
+tsconfig.test.json
+.env.test
+config.test.js
+
+# Python files
+.venv/

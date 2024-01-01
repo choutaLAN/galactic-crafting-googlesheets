@@ -1,0 +1,27 @@
+{
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "app": "npm run build && node build/app.js",   
+    "test": "npm run build:test && node testBuild/appTest.js"
+  },
+  "dependencies": {
+    "@google-cloud/secret-manager": "^5.0.1",
+    "@project-serum/anchor": "^0.25.0",
+    "@solana/wallet-adapter-wallets": "^0.19.24",
+    "@staratlas/atlas-prime": "^0.11.2",
+    "@staratlas/claim-stake": "^0.9.7",
+    "@staratlas/crafting": "^0.9.7",
+    "@staratlas/galactic-marketplace": "^0.9.7",
+    "@staratlas/sage": "^0.9.7",
+    "bn.js": "^5.2.1",
+    "dotenv": "^16.3.1",
+    "googleapis": "^129.0.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.5",
+    "typescript": "^5.3.3"
+  }
+}
