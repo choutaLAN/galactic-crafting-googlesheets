@@ -85,10 +85,10 @@ async function uploadCraftingDataToSheet(sheets: sheets_v4.Sheets, spreadsheetId
 
     // Verify and use environment variables
     const spreadsheetId = process.env.SPREADSHEET_ID;
-    const range = process.env.SHEET_RANGE;
+    const range = process.env.CRAFTING_DATA_SHEET_RANGE;
     const valueInputOption = process.env.VALUE_INPUT_OPTION;
     if (!spreadsheetId || !range || !valueInputOption) {
-      throw new Error("One or more required environment variables (SPREADSHEET_ID, SHEET_RANGE, VALUE_INPUT_OPTION) are not set.");
+      throw new Error("One or more required environment variables (SPREADSHEET_ID, CRAFTING_DATA_SHEET_RANGE, VALUE_INPUT_OPTION) are not set.");
     }
 
     console.log('Uploading data to Google Sheets...');

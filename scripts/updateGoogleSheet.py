@@ -8,6 +8,8 @@ load_dotenv()
 # Now you can use os.getenv to access your variables
 service_key_path = os.getenv('GOOGLE_CREDENTIALS_FILE')
 spreadsheet_id = os.getenv('SPREADSHEET_ID')
+spreadsheet_sheet = os.getenv('CRAFTING_RESULTS_SHEET')
+spreadsheet_range = os.getenv('CRAFTING_RESULTS_RANGE')
 
 # Set up the connection to Google Sheets
 def auth_gspread():
@@ -25,14 +27,14 @@ def auth_gspread():
 def update_sheet(client, spreadsheet_id):
     # Opening the spreadsheet by ID
     spreadsheet = client.open_by_key(spreadsheet_id)
-    # Select the specific worksheet by its title "RecipeCalcs"
-    worksheet = spreadsheet.worksheet('RecipeCalcs')
+    # Select the specific worksheet by its title specified in .env
+    worksheet = spreadsheet.worksheet(spreadsheet_sheet)
 
     # Clears the entire sheet
     worksheet.clear()
     
     # Update a cell in the selected worksheet
-    worksheet.update('A1', 'Hello, World!')
+    worksheet.update(spreadsheet_range, 'Hello, World! I am a Python script test #2!')
 
 def main():
     client = auth_gspread()
