@@ -33,3 +33,5 @@ config.test.js
 
 # Python files
 .venv/
+
+# Archives
