@@ -98,21 +98,35 @@ def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data):
             logging.info(f"No match found for item '{item_name}'")
     return matched_recipes
 
-
-
-
 def post_ingredients_to_sheet(worksheet, matched_recipes):
-    # Start at the second row to leave space for the header
-    row_index = 2
-    for item_name, quantity, recipe, ingredients in matched_recipes:
+    # Clear the worksheet of old data
+    worksheet.clear()
+    logging.info("Worksheet cleared of old data.")
+
+    # Prepare a dictionary to sum the quantities for the same ingredient
+    consolidated_ingredients = {}
+
+    # Aggregate ingredients and their quantities
+    for _, _, _, ingredients in matched_recipes:
         for name, total_quantity in ingredients:
-            # Set the worksheet cell at column A, current row index to ingredient name
-            worksheet.update_cell(row_index, 1, name)
-            # Set the worksheet cell at column B, current row index to total quantity
-            worksheet.update_cell(row_index, 2, total_quantity)
-            # Increment the row index for the next ingredient
-            row_index += 1
-    logging.info("Ingredients and quantities posted successfully")
+            if name in consolidated_ingredients:
+                consolidated_ingredients[name] += total_quantity
+            else:
+                consolidated_ingredients[name] = total_quantity
+    
+    # Prepare the data to be updated in batch
+    # Start with headers
+    cell_values = [['INGREDIENT', 'AMOUNT']]
+
+    # Append the consolidated ingredient data
+    for name, total_quantity in consolidated_ingredients.items():
+        cell_values.append([name, total_quantity])
+    
+    # Update the sheet in one batch
+    worksheet.update('A1:B' + str(len(cell_values)), cell_values)
+    logging.info("Batch update completed for consolidated ingredients and quantities.")
+
+
 
 
 
@@ -138,6 +152,10 @@ def post_matched_recipes_to_sheet(worksheet, matched_recipes):
         except Exception as e:
             logging.error(f"Failed to update sheet for {item_name}: {e}")
 
+
+
+
+
 def main():
     # Load data from JSON files
     crafting_data, nft_data = load_data()
@@ -160,16 +178,12 @@ def main():
         matched_recipes = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data)
 
         # Get the results worksheet
-        results_worksheet = get_worksheet(client, os.getenv('CRAFTING_RESULTS_SHEET'))
-        if results_worksheet is not None:
-            # Set the headers for the columns
-            results_worksheet.update_cell(1, 1, 'INGREDIENT')
-            results_worksheet.update_cell(1, 2, 'AMOUNT')
+    results_worksheet = get_worksheet(client, os.getenv('CRAFTING_RESULTS_SHEET'))
+    if results_worksheet is not None:
+        # Post ingredients and their quantities to the sheet in batch
+        post_ingredients_to_sheet(results_worksheet, matched_recipes)
 
-            # Post ingredients and their quantities to the sheet
-            post_ingredients_to_sheet(results_worksheet, matched_recipes)
-
-            logging.info("Headers and ingredients with quantities posted successfully")
+        logging.info("Headers and ingredients with quantities posted successfully")
 
 if __name__ == "__main__":
     main()
