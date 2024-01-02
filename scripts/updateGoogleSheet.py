@@ -73,28 +73,68 @@ def fetch_data_from_sheet(worksheet, data_range):
         logging.error(f"Failed to fetch data from sheet: {e}")
         return None
 
-def find_matching_recipes(crafting_requests, parsed_crafting_data):
+def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data):
     matched_recipes = []
-    for item_name, quantity in crafting_requests:
-        # Convert request item name to lower case for case-insensitive comparison
+    for item_name, request_quantity in crafting_requests:
         item_name_lower = item_name.lower()
-        
-        # Find the matching recipe with case-insensitive key
         matched_recipe = next((value for key, value in parsed_crafting_data.items() if key.lower() == item_name_lower), None)
 
         if matched_recipe:
-            matched_recipes.append((item_name, quantity, matched_recipe))
-            logging.info(f"Match found: Item '{item_name}', Quantity '{quantity}', Recipe: {matched_recipe}")
+            ingredients = matched_recipe.get('ingredients', [])
+            ingredient_details = []
+            for ingredient in ingredients:
+                mint_address = ingredient['mint']
+                base_quantity = int(ingredient['amount'])
+                total_quantity = base_quantity * request_quantity
+
+                # Find the name for each mint address
+                name = next((item['name'] for item in nft_data if item['mint'] == mint_address), "Unknown Ingredient")
+                ingredient_details.append((name, total_quantity))
+                logging.info(f"Ingredient: {name}, Quantity: {total_quantity}, Mint Address: {mint_address}")
+
+            matched_recipes.append((item_name, request_quantity, matched_recipe, ingredient_details))
+            logging.info(f"Match found: Item '{item_name}', Quantity '{request_quantity}', Recipe: {matched_recipe}, Ingredients: {ingredient_details}")
         else:
             logging.info(f"No match found for item '{item_name}'")
     return matched_recipes
 
+
+
+
+def post_ingredients_to_sheet(worksheet, matched_recipes):
+    # Start at the second row to leave space for the header
+    row_index = 2
+    for item_name, quantity, recipe, ingredients in matched_recipes:
+        for name, total_quantity in ingredients:
+            # Set the worksheet cell at column A, current row index to ingredient name
+            worksheet.update_cell(row_index, 1, name)
+            # Set the worksheet cell at column B, current row index to total quantity
+            worksheet.update_cell(row_index, 2, total_quantity)
+            # Increment the row index for the next ingredient
+            row_index += 1
+    logging.info("Ingredients and quantities posted successfully")
+
+
+
+def get_ingredient_details(ingredients, nft_data):
+    ingredient_details = []
+    mint_to_name = {nft['mint']: nft['name'] for nft in nft_data}
+    for ingredient in ingredients:
+        mint_address = ingredient['mint']
+        quantity = ingredient['amount']
+        name = mint_to_name.get(mint_address, "Unknown Ingredient")
+        ingredient_details.append((name, quantity))
+        logging.info(f"Ingredient: {name}, Quantity: {quantity}, Mint Address: {mint_address}")
+    return ingredient_details
+
 def post_matched_recipes_to_sheet(worksheet, matched_recipes):
-    for index, (item_name, quantity, recipe) in enumerate(matched_recipes, start=1):
+    for index, (item_name, quantity, recipe, ingredients) in enumerate(matched_recipes, start=1):
         try:
-            worksheet.update(range_name=f'A{index}', values=[[recipe['data']['namespace']]])
+            ingredient_text = ", ".join([f"{name}: {qty}" for name, qty in ingredients])
+            worksheet.update(range_name=f'A{index}', values=[[item_name]])
             worksheet.update(range_name=f'B{index}', values=[[quantity]])
-            logging.info(f"Posted recipe for '{item_name}' to the sheet at row {index}")
+            worksheet.update(range_name=f'C{index}', values=[[ingredient_text]])
+            logging.info(f"Posted recipe for '{item_name}' with ingredients '{ingredient_text}' to the sheet at row {index}")
         except Exception as e:
             logging.error(f"Failed to update sheet for {item_name}: {e}")
 
@@ -115,14 +155,23 @@ def main():
     if crafting_requests_worksheet is not None:
         crafting_requests_data = fetch_data_from_sheet(crafting_requests_worksheet, os.getenv('CRAFTING_DATA_FECTH_RANGE'))
         crafting_requests = [[row[0], int(row[1])] for row in crafting_requests_data if len(row) >= 2]
-        logging.info(f"Fetched {len(crafting_requests)} crafting requests")
 
-        # Find and post matched recipes
-        matched_recipes = find_matching_recipes(crafting_requests, parsed_crafting_data)
+        # Find matched recipes
+        matched_recipes = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data)
+
+        # Get the results worksheet
         results_worksheet = get_worksheet(client, os.getenv('CRAFTING_RESULTS_SHEET'))
         if results_worksheet is not None:
-            post_matched_recipes_to_sheet(results_worksheet, matched_recipes)
-            logging.info("Matched recipes posted successfully")
+            # Set the headers for the columns
+            results_worksheet.update_cell(1, 1, 'INGREDIENT')
+            results_worksheet.update_cell(1, 2, 'AMOUNT')
+
+            # Post ingredients and their quantities to the sheet
+            post_ingredients_to_sheet(results_worksheet, matched_recipes)
+
+            logging.info("Headers and ingredients with quantities posted successfully")
 
 if __name__ == "__main__":
     main()
+
+
