@@ -21,7 +21,6 @@ logging.basicConfig(level=logging.INFO,
                               logging.StreamHandler()])
 logging.info("Script started")
 
-
 # A simple in-memory cache to store data with expiration time.
 class SimpleCache:
     def __init__(self):
@@ -105,6 +104,16 @@ crystal_lattice_variants = {
     'Arco': 'Crystal Lattice 3'
 }
 
+framework_variants = {
+    'Framework 1 (Iron)': 'Framework 1',
+    'Framework 2 (Steel)': 'Framework 2'
+}
+
+toolkit_variants = {
+    'Toolkit 1 (Iron)': 'Toolkit 1',
+    'Toolkit 2 (Steel)': 'Toolkit 2'
+}
+
 # Global variables for sheet titles and ranges
 PLAYER_PROFILE_SHEET = os.getenv('PLAYER_PROFILE_SHEET')
 PLAYER_PROFILE_RANGE = os.getenv('PLAYER_PROFILE_RANGE')
@@ -117,6 +126,8 @@ CRYSTAL_LOOKUP_KEY = os.getenv('CRYSTAL_LOOKUP_KEY')
 FACTION_LOOKUP_KEY = os.getenv('FACTION_LOOKUP_KEY')
 CACHE_EXPIRY = int(os.getenv('CACHE_EXPIRY', 3600)) # Default cache expiry is 1 hour
 CACHE_EXPIRY_PERMANENT = int(os.getenv('CACHE_EXPIRY_PERMANENT', 86400)) # Default cache expiry is 1 day
+FRAMEWORK_LOOKUP_KEY=os.getenv('FRAMEWORK_LOOKUP_KEY')
+TOOLKIT_LOOKUP_KEY=os.getenv('TOOLKIT_LOOKUP_KEY')
 
 
 # Simple cache dictionary
@@ -184,6 +195,21 @@ def auth_gspread():
     except Exception as e:
         logging.error(f"Failed to authenticate with Google Sheets: {e}")
         exit(1)
+
+def fetch_user_preferences(client, sheet_title, framework_key, toolkit_key):
+    framework_key = FRAMEWORK_LOOKUP_KEY
+    toolkit_key = TOOLKIT_LOOKUP_KEY
+    worksheet = get_worksheet(client, sheet_title)
+    data = worksheet.get_all_values()
+    preferences = {'framework': 'none', 'toolkit': 'none'}
+
+    for row in data:
+        if framework_key in row:
+            preferences['framework'] = row[row.index(framework_key) + 1].strip().title()
+        if toolkit_key in row:
+            preferences['toolkit'] = row[row.index(toolkit_key) + 1].strip().title()
+
+    return preferences
 
 
 def find_player_faction(client):
@@ -321,19 +347,23 @@ def choose_crystal_lattice_variant(player_faction, player_ingredients, parsed_cr
 
 
 
-def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data):
-    # mint_to_name = {nft['mint']: nft['name'] for nft in nft_data}
-
-    # Convert NFT data to DataFrame for quick lookups
+def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants):
     nft_df = pd.DataFrame(nft_data)
-    
     matched_recipes = []
+    all_initial_ingredients = {}  # Initialize the dictionary to hold all initial ingredients
+
     for item_name, request_quantity in crafting_requests:
-        # Normalize the item name to match the parsed_crafting_data keys
+        # Normalize the item name
         item_name_normalized = item_name.strip().title()
 
+        # Check for special cases where the user has a preference for Frameworks or Toolkits
+        if item_name_normalized == 'Framework' and user_preferences['framework'] != 'none':
+            item_name_normalized = framework_variants.get(user_preferences['framework'], item_name_normalized)
+        elif item_name_normalized == 'Toolkit' and user_preferences['toolkit'] != 'none':
+            item_name_normalized = toolkit_variants.get(user_preferences['toolkit'], item_name_normalized)
+
         matched_recipe = parsed_crafting_data.get(item_name_normalized)
-        
+
         if matched_recipe and 'ingredients' in matched_recipe:
             ingredients_df = pd.DataFrame(matched_recipe['ingredients'])
             if not ingredients_df.empty:
@@ -341,18 +371,26 @@ def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data):
                 
                 merged_df = ingredients_df.merge(nft_df[['mint', 'name']], on='mint', how='left')
                 merged_df['name'].fillna('Unknown Ingredient', inplace=True)
-                
+
                 consolidated_df = merged_df.groupby('name')['total_quantity'].sum().reset_index()
                 ingredient_details = list(consolidated_df.itertuples(index=False, name=None))
+
+                matched_recipes.append((item_name_normalized, request_quantity, matched_recipe, ingredient_details))
+                logging.info(f"Matched recipe for '{item_name_normalized}' with ingredients.")
                 
-                matched_recipes.append((item_name, request_quantity, matched_recipe, ingredient_details))
-                logging.info(f"Matched recipe for '{item_name}' with ingredients.")
+                # Add to all_initial_ingredients dictionary
+                for name, qty in ingredient_details:
+                    all_initial_ingredients[name] = all_initial_ingredients.get(name, 0) + qty
+
             else:
-                logging.warning(f"Recipe found for '{item_name}' but no ingredients present.")
+                logging.warning(f"Recipe found for '{item_name_normalized}' but no ingredients present.")
         else:
-            logging.warning(f"No matched recipe found for '{item_name}'.")
-    
-    return matched_recipes
+            logging.warning(f"No matched recipe found for '{item_name_normalized}'.")
+
+    # Return both matched_recipes and the all_initial_ingredients dictionary
+    return matched_recipes, all_initial_ingredients
+
+
 
 
 def get_ingredient_details(ingredients, nft_data):
@@ -468,57 +506,52 @@ def post_ingredients_to_sheet(worksheet, matched_recipes, parsed_crafting_data, 
 
     logging.info("Updated worksheet with initial, full, and raw ingredients.")
     return all_full_ingredients
+    
 
+def calculate_needed_ingredients(player_ingredients, crafting_requests, parsed_crafting_data, mint_to_name, all_full_ingredients):
+    logging.info(f"Inside function - Crafting requests: {crafting_requests}")
+    all_recipes_needed_ingredients = {}
 
+    def decompose(item_name, quantity_needed, player_ingredients, temp_needed_ingredients):
+        logging.info(f"Decomposing {quantity_needed} of {item_name}")
+        if item_name in parsed_crafting_data and 'ingredients' in parsed_crafting_data[item_name]:
+            for ingredient_dict in parsed_crafting_data[item_name]['ingredients']:
+                component_name = mint_to_name.get(ingredient_dict['mint'], "Unknown Ingredient")
+                component_qty = int(ingredient_dict['amount'])
+                total_component_needed = component_qty * quantity_needed
+                player_component_qty = player_ingredients.get(component_name, 0)
+                remaining_qty = max(total_component_needed - player_component_qty, 0)
 
+                logging.info(f"Component {component_name}: Need {total_component_needed}, Player has {player_component_qty}, Remaining {remaining_qty}")
 
+                if remaining_qty > 0:
+                    temp_needed_ingredients[component_name] = temp_needed_ingredients.get(component_name, 0) + remaining_qty
+                    decompose(component_name, remaining_qty, player_ingredients, temp_needed_ingredients)
 
+    for item_name, quantity_needed in crafting_requests.items():
+        temp_needed_ingredients = {}
+        player_qty = player_ingredients.get(item_name, 0)
+        needed_qty = max(quantity_needed - player_qty, 0)
 
-def calculate_needed_ingredients(player_ingredients, all_full_ingredients, parsed_crafting_data, mint_to_name):
-    needed_ingredients = {}
-    decomposed_ingredients = {}
-
-    # Initial calculation of needed ingredients
-    for ingredient, required_qty in all_full_ingredients.items():
-        player_qty = player_ingredients.get(ingredient, 0)
-        needed_qty = max(required_qty - player_qty, 0)
         if needed_qty > 0:
-            needed_ingredients[ingredient] = needed_qty
+            temp_needed_ingredients[item_name] = needed_qty
+            decompose(item_name, needed_qty, player_ingredients.copy(), temp_needed_ingredients)
 
-    # Recursive function to decompose ingredients
-    def decompose(item_name, quantity_needed, player_ingredients, decomposed_ingredients, parsed_crafting_data, mint_to_name):
-        if item_name in parsed_crafting_data:
-            item_data = parsed_crafting_data[item_name]
-            if 'ingredients' in item_data:
-                for ingredient_dict in item_data['ingredients']:
-                    component_mint = ingredient_dict['mint']
-                    component_name = mint_to_name.get(component_mint, "Unknown Ingredient")
-                    if component_name == "Unknown Ingredient":
-                        continue
+        all_recipes_needed_ingredients[item_name] = temp_needed_ingredients
 
-                    component_qty = int(ingredient_dict['amount'])
-                    total_component_needed = component_qty * quantity_needed
-                    player_component_qty = player_ingredients.get(component_name, 0)
+    # Consolidating needed ingredients across all recipes
+    consolidated_needed_ingredients = {}
+    for recipe_needed_ingredients in all_recipes_needed_ingredients.values():
+        for ingredient, qty in recipe_needed_ingredients.items():
+            consolidated_needed_ingredients[ingredient] = consolidated_needed_ingredients.get(ingredient, 0) + qty
 
-                    used_qty = min(total_component_needed, player_component_qty)
-                    player_ingredients[component_name] = max(player_component_qty - used_qty, 0)  # Safely deduct
-                    total_component_needed -= used_qty
+    # Add missing ingredients with amount 0
+    for ingredient in all_full_ingredients:
+        if ingredient not in consolidated_needed_ingredients:
+            consolidated_needed_ingredients[ingredient] = 0
 
-                    if total_component_needed > 0:
-                        decomposed_ingredients[component_name] = decomposed_ingredients.get(component_name, 0) + total_component_needed
-                        decompose(component_name, total_component_needed, player_ingredients, decomposed_ingredients, parsed_crafting_data, mint_to_name)
+    return consolidated_needed_ingredients
 
-    # Decompose each needed ingredient
-    for item_name in list(needed_ingredients):
-        quantity_needed = needed_ingredients[item_name]
-        if quantity_needed > 0:
-            decompose(item_name, quantity_needed, player_ingredients.copy(), decomposed_ingredients, parsed_crafting_data, mint_to_name)
-
-    # Replace initial calculations with decomposed quantities
-    for ingredient, decomposed_qty in decomposed_ingredients.items():
-        needed_ingredients[ingredient] = decomposed_qty
-
-    return needed_ingredients
 
 
 def post_needed_ingredients_to_sheet(worksheet, needed_ingredients, mint_to_name, name_to_mint):
@@ -543,17 +576,17 @@ def main():
     # Parse the crafting data
     parsed_crafting_data = parse_crafting_data(crafting_data, nft_data)
     logging.info("Crafting data parsed successfully")
-    logging.info("Sample of parsed crafting data: %s", list(parsed_crafting_data.items())[:5])
-
 
     # Create the mint_to_name dictionary
     mint_to_name = {nft['mint']: nft['name'] for nft in nft_data}
-    # Create the name_to_mint dictionary
     name_to_mint = {name: mint for mint, name in mint_to_name.items()}
 
     # Initialize the Google Sheets client
     client = auth_gspread()
     logging.info("Authenticated with Google Sheets successfully")
+
+    # Fetch user preferences for Framework and Toolkit
+    user_preferences = fetch_user_preferences(client, PLAYER_PROFILE_SHEET, FRAMEWORK_LOOKUP_KEY, TOOLKIT_LOOKUP_KEY)
 
     # Fetch player profile and account data from Google Sheets
     player_profile_worksheet = get_worksheet(client, PLAYER_PROFILE_SHEET)
@@ -580,12 +613,11 @@ def main():
     crafting_requests_worksheet = get_worksheet(client, CRAFTING_DATA_FETCH_SHEET)
     if crafting_requests_worksheet is not None:
         crafting_requests_data = fetch_data_with_caching(client, CRAFTING_DATA_FETCH_SHEET, CRAFTING_DATA_FETCH_RANGE, ttl=CACHE_EXPIRY)
-        # Updated line below to handle numbers with commas
-        crafting_requests = [[row[0], int(row[1].replace(',', ''))] for row in crafting_requests_data if len(row) >= 2]
+        crafting_requests = [(row[0], int(row[1].replace(',', ''))) for row in crafting_requests_data if len(row) >= 2]
         logging.info(f"Crafting requests fetched: {crafting_requests}")
 
-        # Find matched recipes and all ingredients
-        matched_recipes = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data)
+        # Find matched recipes and all initial ingredients
+        matched_recipes, all_initial_ingredients_dict = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants)
         logging.info(f"Found {len(matched_recipes)} matched recipes.")
 
         # Get the results worksheet
@@ -594,18 +626,19 @@ def main():
             # Post initial ingredients, full ingredient list, and raw ingredients to the sheet
             all_full_ingredients = post_ingredients_to_sheet(results_worksheet, matched_recipes, parsed_crafting_data, mint_to_name, chosen_crystal_recipe)
             logging.info("Ingredients with quantities posted successfully")
-            
-            # Ensure all_full_ingredients is not None before proceeding
+
             if all_full_ingredients is not None:
                 # Calculate needed ingredients
-                needed_ingredients = calculate_needed_ingredients(player_ingredients, all_full_ingredients, parsed_crafting_data, mint_to_name)
+                # Just before calling calculate_needed_ingredients
+                logging.info(f"Inspecting crafting requests structure: {crafting_requests}")
+                needed_ingredients = calculate_needed_ingredients(player_ingredients, all_initial_ingredients_dict, parsed_crafting_data, mint_to_name, all_full_ingredients)
+                logging.info("Calculated needed ingredients")
 
-                # Post needed ingredients to the sheet, now including the mint_to_name argument
+                # Post needed ingredients to the sheet
                 post_needed_ingredients_to_sheet(results_worksheet, needed_ingredients, mint_to_name, name_to_mint)
                 logging.info("Needed ingredients with quantities posted successfully")
             else:
                 logging.error("Error: all_full_ingredients is None")
-
 
 if __name__ == "__main__":
     main()
