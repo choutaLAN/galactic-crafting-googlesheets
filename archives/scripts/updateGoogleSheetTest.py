@@ -255,9 +255,10 @@ def find_player_crystal_choice(client):
             crystal_choice = row[row_lower.index(CRYSTAL_LOOKUP_KEY.lower()) + 1].strip().lower()
             break
 
-    if crystal_choice is None or crystal_choice == 'none':
-        logging.error(f"Error finding player crystal choice: {CRYSTAL_LOOKUP_KEY} not found or set to 'none'")
-        return None
+    if crystal_choice is None:
+        logging.error(f"Error finding player crystal choice: {CRYSTAL_LOOKUP_KEY} not found in the data.")
+    elif crystal_choice == 'none':
+        logging.info("Player has not specified a crystal choice (set to 'none').")
     else:
         logging.info(f"Player's crystal choice found: {crystal_choice}")
 
