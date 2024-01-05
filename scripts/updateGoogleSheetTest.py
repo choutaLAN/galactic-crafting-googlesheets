@@ -114,6 +114,20 @@ toolkit_variants = {
     'Toolkit 2 (Steel)': 'Toolkit 2'
 }
 
+def choose_framework_and_toolkit_variants(player_ingredients):
+    iron_count = player_ingredients.get('Iron', 0)
+    carbon_count = player_ingredients.get('Carbon', 0)
+
+    # Determine if Steel or Iron should be used
+    if carbon_count >= iron_count * 2:
+        framework_variant = 'Framework 2 (Steel)'
+        toolkit_variant = 'Toolkit 2 (Steel)'
+    else:
+        framework_variant = 'Framework 1 (Iron)'
+        toolkit_variant = 'Toolkit 1 (Iron)'
+
+    return framework_variant, toolkit_variant
+
 # Global variables for sheet titles and ranges
 PLAYER_PROFILE_SHEET = os.getenv('PLAYER_PROFILE_SHEET')
 PLAYER_PROFILE_RANGE = os.getenv('PLAYER_PROFILE_RANGE')
@@ -161,12 +175,6 @@ def load_data():
         exit(1)
 
     return crafting_data, nft_data
-
-
-# Call this function when you need to refresh the cache manually
-#def refresh_mint_to_name_cache():
-    cache.refresh('mint_to_name')
-    # Next call to parse_crafting_data will refresh the cache
 
 
 # Parse the crafting data into a searchable format
@@ -347,20 +355,25 @@ def choose_crystal_lattice_variant(player_faction, player_ingredients, parsed_cr
 
 
 
-def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants):
+def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants, player_ingredients):
     nft_df = pd.DataFrame(nft_data)
     matched_recipes = []
     all_initial_ingredients = {}  # Initialize the dictionary to hold all initial ingredients
 
+    # Determine specific variants for Toolkit and Framework if user preference is 'none'
+    if user_preferences['framework'] in ['none', 'None'] or user_preferences['toolkit'] in ['none', 'None']:
+        framework_variant, toolkit_variant = choose_framework_and_toolkit_variants(player_ingredients)
+        user_preferences['framework'] = framework_variant if user_preferences['framework'] in ['none', 'None'] else user_preferences['framework']
+        user_preferences['toolkit'] = toolkit_variant if user_preferences['toolkit'] in ['none', 'None'] else user_preferences['toolkit']
+
     for item_name, request_quantity in crafting_requests:
-        # Normalize the item name
         item_name_normalized = item_name.strip().title()
 
-        # Check for special cases where the user has a preference for Frameworks or Toolkits
-        if item_name_normalized == 'Framework' and user_preferences['framework'] != 'none':
-            item_name_normalized = framework_variants.get(user_preferences['framework'], item_name_normalized)
-        elif item_name_normalized == 'Toolkit' and user_preferences['toolkit'] != 'none':
+        # Map 'Toolkit' and 'Framework' to specific variants
+        if item_name_normalized == 'Toolkit':
             item_name_normalized = toolkit_variants.get(user_preferences['toolkit'], item_name_normalized)
+        elif item_name_normalized == 'Framework':
+            item_name_normalized = framework_variants.get(user_preferences['framework'], item_name_normalized)
 
         matched_recipe = parsed_crafting_data.get(item_name_normalized)
 
@@ -378,17 +391,15 @@ def find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, use
                 matched_recipes.append((item_name_normalized, request_quantity, matched_recipe, ingredient_details))
                 logging.info(f"Matched recipe for '{item_name_normalized}' with ingredients.")
                 
-                # Add to all_initial_ingredients dictionary
                 for name, qty in ingredient_details:
                     all_initial_ingredients[name] = all_initial_ingredients.get(name, 0) + qty
-
             else:
                 logging.warning(f"Recipe found for '{item_name_normalized}' but no ingredients present.")
         else:
             logging.warning(f"No matched recipe found for '{item_name_normalized}'.")
 
-    # Return both matched_recipes and the all_initial_ingredients dictionary
     return matched_recipes, all_initial_ingredients
+
 
 
 
@@ -602,6 +613,12 @@ def main():
     player_ingredients = get_player_ingredient_quantities(client)
     logging.info(f"Player's crystal choice: {player_crystal_choice}")
 
+    # Update user preferences for Framework and Toolkit based on inventory if 'none'
+    if user_preferences['framework'] == 'none' or user_preferences['toolkit'] == 'none':
+        framework_variant, toolkit_variant = choose_framework_and_toolkit_variants(player_ingredients)
+        user_preferences['framework'] = framework_variant if user_preferences['framework'] == 'none' else user_preferences['framework']
+        user_preferences['toolkit'] = toolkit_variant if user_preferences['toolkit'] == 'none' else user_preferences['toolkit']
+
     chosen_crystal_recipe, crystal_ingredients = None, []
     if player_crystal_choice and player_crystal_choice.title() in crystal_lattice_variants:
         chosen_crystal_recipe = crystal_lattice_variants[player_crystal_choice.title()]
@@ -617,7 +634,8 @@ def main():
         logging.info(f"Crafting requests fetched: {crafting_requests}")
 
         # Find matched recipes and all initial ingredients
-        matched_recipes, all_initial_ingredients_dict = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants)
+        matched_recipes, all_initial_ingredients_dict = find_matching_recipes(crafting_requests, parsed_crafting_data, nft_data, user_preferences, framework_variants, toolkit_variants, player_ingredients)
+
         logging.info(f"Found {len(matched_recipes)} matched recipes.")
 
         # Get the results worksheet
