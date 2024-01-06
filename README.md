@@ -18,6 +18,7 @@ Lastly, you will need to create and set a .env environment file.
 
 Here is the outline you will need to use for the current code to work with the above-shared Google sheet.
 
+```
 # Google Credentials
 GOOGLE_CREDENTIALS_FILE=C:\Users\[USERNAME]\[ANY FOLDER PATH YOU WANT]\[FILE NAME FROM GOOGLE].json
 SERVICE_ACCOUNT_EMAIL=[CREATE YOUR OWN USER SERVICE EMAIL VIA GOOGLE- ASK CHATGPT WHAT THIS IS IF YOU DON'T KNOW!]
@@ -69,4 +70,4 @@ CRAFTING_PROGRAM_PUBLIC_KEY=Craftf1EGzEoPFJ1rpaTSQG1F6hhRRBAf4gRo9hdSZjR
 # CACHING
 CACHE_EXPIRY = 3600  # 1 hour
 CACHE_EXPIRY_PERMANENT = 86400 # Default cache expiry is 1 day
-
+```
