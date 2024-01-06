@@ -28,7 +28,7 @@ SPREADSHEET_ID=[ADD YOUR SPREADSHEETS ID]
 VALUE_INPUT_OPTION=USER_ENTERED  # Options: USER_ENTERED, or RAW. 
 # This tells the API how to interpret the values in the spreadsheet. 
 # For example, using USER_ENTERED will let the API know to parse the values as if the user typed them into the sheet by a human and apply formatting appropriately.
-# RAW tells the API to not parse the values and add them in as is.
+# RAW tells the API not to parse the values and add them in as is.
 CRAFTING_DATA_SHEET_RANGE=StarAtlasCrafting!A1
 
 CRAFTING_RESULTS_SHEET=RecipeCalcs
@@ -57,7 +57,7 @@ FRAMEWORK_LOOKUP_KEY=Framework Default
 TOOLKIT_LOOKUP_KEY=Toolkit Default
 
 # Node RPC Host
-NODE_RPC_HOST=https://solana-api.syndica.io/access-token/WPoEqWQ2auQQY1zHRNGJyRBkvfOLqw58FqYucdYtmy8q9Z84MBWwqtfVf8jKhcFh/rpc #You can add your own RPC Host here. This one has been working well for me. It was passed on by Granite Warlock from the CLUB.
+NODE_RPC_HOST=[ADD YOUR RPC NODE URL HERE]
 
 # Data Directory
 CRAFTING_DATA_RAW='../data/craftingDataRaw.json'
