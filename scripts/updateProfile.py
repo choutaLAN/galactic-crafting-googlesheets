@@ -6,8 +6,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from dotenv import load_dotenv
 import warnings
-import time
-from collections import defaultdict
+
 # DeprecationWarning: [Deprecated][in version 6.0.0]: Method signature's arguments 'range_name' and 'values' will change their order. We recommend using named arguments for minimal impact. In addition, the argument 'values' will be mandatory of type: 'List[List]'. (ex) Worksheet.update(values = [[]], range_name=) sheet.update(range_name, values)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -35,7 +34,6 @@ GALAXY_NFTS_DATA = os.getenv('GALAXY_NFTS_DATA')
 def load_json_file(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
         return json.load(file)
-
 
 
 # Function to authenticate with Google Sheets
@@ -89,7 +87,6 @@ def compare_and_merge_data(blockchain_data, nft_data):
     return merged_data
 
 
-
 def post_to_google_sheets(data, sheet, range_name):
     # Filter out items with "Unknown Item" in their name
     filtered_data = {name: amount for name, amount in data.items() if not name.startswith("Unknown Item")}
@@ -106,8 +103,6 @@ def post_to_google_sheets(data, sheet, range_name):
         sheet.update(range_name, values)
     else:
         logging.info("No data to update in Google Sheets.")
-
-
 
 
 def convert_nft_data_to_dict(nft_list):
