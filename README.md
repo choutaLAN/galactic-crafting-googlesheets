@@ -18,6 +18,8 @@ Lastly, you will need to create and set a .env environment file.
 
 Here is the outline you will need to use for the current code to work with the above-shared Google sheet.
 
+If you really want to try this our, but need help getting setup or understanding what the frick I am doing with the code, reach out; I am happy to jump on a call and chat through it.
+
 ```
 # Google Credentials
 GOOGLE_CREDENTIALS_FILE=C:\Users\[USERNAME]\[ANY FOLDER PATH YOU WANT]\[FILE NAME FROM GOOGLE].json
